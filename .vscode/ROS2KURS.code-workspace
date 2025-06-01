@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../../../../vscode/ROS2KURS"
+		},
+		{
+			"name": "watch32pio",
+			"path": ".."
+		}
+	],
+	"settings": {}
+}
