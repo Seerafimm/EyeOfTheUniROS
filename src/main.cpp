@@ -69,7 +69,7 @@ void initlogooled(){
   oled.autoPrintln(true);
   oled.print("EYE OF THE ");
   oled.setCursorXY(26,40);
-  oled.print("UNIVERSE");
+  oled.print("UNIros");
   drawStar(50, 30, 25, 15, 8);
   oled.update();
   oled.clear();
