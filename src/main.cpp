@@ -2,7 +2,29 @@
 #include <Keypad.h>
 #include <GyverOLED.h>
 #include <CheapStepper.h>
-//git testing line v2
+//microros includes
+#include <Arduino.h>
+#include <micro_ros_platformio.h>
+
+#include <rcl/rcl.h>
+#include <rclc/rclc.h>
+#include <rclc/executor.h>
+
+#include <std_msgs/msg/int32.h>
+
+
+//ros defines 
+rcl_publisher_t publisher;
+std_msgs__msg__Int32 msg;
+
+rclc_executor_t executor;
+rclc_support_t support;
+rcl_allocator_t allocator;
+rcl_node_t node;
+rcl_timer_t timer;
+#define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){error_loop();}}
+#define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
+
 
 //RTC init
 const int rstpin = 25;//rst(ce)
@@ -41,6 +63,7 @@ Keypad keypad44 = Keypad(makeKeymap(keys),rowpins,colpins,4,4);//object keypad w
 char key = NO_KEY; //keypad key
 int window = 0; //0 for logo, 1 for planet select, 2 for data display.//depricated
 int selection = 0; //menu selection variable, 1-8 for 8 menu items
+String planetname = String("null");
 ///////////////////////////////////////////////////////////
 void drawStar(int cx, int cy, int l1, int l2, int l3) {
   // Длинные лучи
@@ -85,50 +108,97 @@ void showPlanetInfo(float azimuth, float elevation, const char* planetName) {
   oled.printf("Высота: %.2f\n", elevation);
   oled.update();
 }
+void pushtorasp(int selection) {  
+  //Publish message
+  msg.data = selection;
+  
+  RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
+  
+}
 void menucheck(char key){
   
   if (key == '1') {
     Serial.printf("Menu 1 selected\n");
     oled.clear();
     oled.home();
-    oled.print("Menu 1 Selected");
+    oled.print("sun");
     selection = 1;
+    planetname = "sun";
     oled.update();
   } 
   else if (key == '2') {
     Serial.printf("Menu 2 selected\n");
     oled.clear();
     oled.home();
-    oled.print("Menu 2 Selected");
+    oled.print("mercury");
     selection = 2;
+    planetname = "mercury";
     oled.update();
   } 
   else if (key == '3') {
     Serial.printf("Menu 3 selected\n");
     oled.clear();
     oled.home();
-    oled.print("Menu 3 Selected");
+    oled.print("venus");
     selection = 3;
+    planetname = "venus";
     oled.update();
   } 
   else if (key == '4') {
     Serial.printf("Menu 4 selected\n");
     oled.clear();
     oled.home();
-    oled.print("Menu 4 Selected");
+    oled.print("mars");
     selection = 4;
+    planetname = "mars";
     oled.update();
   }
+  else if (key == '5') {
+    Serial.printf("Menu 2 selected\n");
+    oled.clear();
+    oled.home();
+    oled.print("jupiter");
+    selection = 5;
+    planetname = "jupiter";
+    oled.update();
+  } 
+  else if (key == '6') {
+    Serial.printf("Menu 2 selected\n");
+    oled.clear();
+    oled.home();
+    oled.print("saturn");
+    selection = 6;
+    planetname = "saturn";
+    oled.update();
+  } 
+  else if (key == '7') {
+    Serial.printf("Menu 2 selected\n");
+    oled.clear();
+    oled.home();
+    oled.print("uranus");
+    selection = 7;
+    planetname = "uranus";
+    oled.update();
+  } 
+  else if (key == '8') {
+    Serial.printf("Menu 2 selected\n");
+    oled.clear();
+    oled.home();
+    oled.print("neptune");
+    selection = 8;
+    planetname = "neptune";
+    oled.update();
+  } 
 
   if (selection !=0){
     if (key == 'a') {
       oled.print("confirmed");
       oled.update();
+      pushtorasp(selection); //send selection to ROS
     }
     if (key == 'b') {
       oled.clear();
-      oled.drawBitmap(0, 0, bitmap_32x32, 32, 32);
-      oled.update();
+      initlogooled();
     }
     if (key == 'c'){
       stepper.newMoveToDegree(true,180);
@@ -140,12 +210,34 @@ void menucheck(char key){
     
   
 }
-
+void error_loop() {
+  while(1) {
+    delay(100);
+  }
+}
 
 void setup() 
 {
   Serial.begin(115200);
-  delay(1000);
+  set_microros_serial_transports(Serial);
+  delay(2000);
+  
+  allocator = rcl_get_default_allocator();
+  RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
+  RCCHECK(rclc_node_init_default(&node, "theeyeesp", "", &support));
+  //ROS start
+   //Publisher init
+  RCCHECK(rclc_publisher_init_default(
+    &publisher,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+    "planet_info"
+  ));
+  
+  RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator)); //1 second timer
+
+  msg.data = 0;
+
 
   //OLED start
   initlogooled();
