@@ -73,6 +73,7 @@ int selection = 0; //menu selection variable, 1-8 for 8 menu items
 String planetname = String("null");
 RtcDateTime currentTime; //current time variable, used for publishing 
 char planetlist[8][18] = {"солнце", "меркурий", "венера", "марс", "юпитер", "сатурн", "уран", "нептун"}; //array of planet names
+float currentAzimuth = 0.0; // Initialize current azimuth
 ///////////////////////////////////////////////////////////
 void drawStar(int cx, int cy, int l1, int l2, int l3) {
   // Длинные лучи
@@ -206,27 +207,65 @@ void menucheck(char key){
     selection = 8;
     planetname = "neptune";
     oled.update();
-  } 
+  }
+  else if (key == '#'){
+    oled.print("изменить существующее время?");
+    oled.update();
+    selection = 2222;
+  }
 
   if (selection !=0){
     if (key == 'a') {
+      if (selection != 2222){
+      oled.clear();
+      oled.setCursor(0,0);
       oled.print("confirmed");
       oled.update();
       pushtorasp(selection); //send selection to ROS
+      }
+      else {
+        RtcDateTime currentTime = RtcDateTime(25, 6, 9, 1, 45, 0);
+        rtc.SetDateTime(currentTime); 
+        oled.clear();
+      }
+    
     }
+
+  
     if (key == 'b') {
       oled.clear();
       initlogooled();
     }
-    if (key == 'c'){
-      stepper.newMoveToDegree(true,180);
-    }
     if (key == 'd'){
-      stepper.newMoveToDegree(true,90);
+      stepper.moveDegrees(true,10);
+      currentAzimuth = 0.0; // Reset current azimuth to 0 after returning to home position
     }
   }
     
   
+}
+void rotatetoazim(float targetazim) {
+
+  targetazim = fmod(targetazim, 360.0);
+  if (targetazim < 0) targetazim += 360.0;
+
+  float diff = targetazim - currentAzimuth; // Calculate the difference between target azimuth and current azimuth
+
+  // Оптимизация кратчайшего поворота
+  if (diff > 180.0) diff -= 360.0;
+  if (diff < -180.0) diff += 360.0;
+  
+  if (diff > 0) {
+    stepper.moveDegreesCW(abs(diff));
+  } 
+  else if (diff < 0) {
+    stepper.moveDegreesCCW(abs(diff));
+  }
+
+  
+  Serial.printf("Rotating to targetazim: %f",  diff);
+  
+  currentAzimuth = targetazim; // Update current azimuth after rotation
 }
 void error_loop() {
   while(1) {
@@ -247,12 +286,14 @@ void subscription_callback(const void * msgin)
   // Process the received message
   showPlanetInfo(msg->x, msg->y, msg->z);
   //function for motor rotation todo here
+  rotatetoazim(msg->x); // Rotate to the azimuth specified in the message
 }
 
 void setup() 
 {
   //OLED start
   initlogooled();
+  
 
   Serial.begin(115200);
   set_microros_serial_transports(Serial);
@@ -289,8 +330,7 @@ void setup()
 
   //RTC start
   rtc.Begin();
-  RtcDateTime currentTime = RtcDateTime(25, 6, 9, 3, 35, 0);
-  rtc.SetDateTime(currentTime); 
+  
   //RTC end
   
   //Stepper start
@@ -361,3 +401,4 @@ void loop()
   //Keypad end
   rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)); //spin executor to process incoming messages
 }
+
