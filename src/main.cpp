@@ -72,7 +72,7 @@ int window = 0; //0 for logo, 1 for planet select, 2 for data display.//depricat
 int selection = 0; //menu selection variable, 1-8 for 8 menu items
 String planetname = String("null");
 RtcDateTime currentTime; //current time variable, used for publishing 
-char planetlist[8][10] = {"sun", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"}; //array of planet names
+char planetlist[8][18] = {"солнце", "меркурий", "венера", "марс", "юпитер", "сатурн", "уран", "нептун"}; //array of planet names
 ///////////////////////////////////////////////////////////
 void drawStar(int cx, int cy, int l1, int l2, int l3) {
   // Длинные лучи
@@ -108,7 +108,7 @@ void initlogooled(){
   oled.home();
   oled.setScale(2);
 }
-void showPlanetInfo(float altitude, float azimuth, float distance) {
+void showPlanetInfo(float azimuth, float altitude, float distance) {
   oled.clear();
   oled.setScale(1);
   oled.setCursor(0,0);
@@ -289,7 +289,7 @@ void setup()
 
   //RTC start
   rtc.Begin();
-  RtcDateTime currentTime = RtcDateTime(24, 05, 10, 16, 59, 20);
+  RtcDateTime currentTime = RtcDateTime(25, 6, 9, 3, 35, 0);
   rtc.SetDateTime(currentTime); 
   //RTC end
   
