@@ -6,22 +6,29 @@
 #include <Arduino.h>
 #include <micro_ros_platformio.h>
 
+#include <geometry_msgs/msg/vector3.h>
 #include <rcl/rcl.h>
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
+#include <std_msgs/msg/string.h>
 
 #include <std_msgs/msg/int32.h>
 
 
 //ros defines 
-rcl_publisher_t publisher;
-std_msgs__msg__Int32 msg;
 
+
+
+geometry_msgs__msg__Vector3 recv_msg;
+std_msgs__msg__String msg;
+
+rcl_publisher_t publisher;
+rcl_subscription_t subscriber;
 rclc_executor_t executor;
 rclc_support_t support;
 rcl_allocator_t allocator;
 rcl_node_t node;
-rcl_timer_t timer;
+
 #define RCCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){error_loop();}}
 #define RCSOFTCHECK(fn) { rcl_ret_t temp_rc = fn; if((temp_rc != RCL_RET_OK)){}}
 
@@ -64,6 +71,8 @@ char key = NO_KEY; //keypad key
 int window = 0; //0 for logo, 1 for planet select, 2 for data display.//depricated
 int selection = 0; //menu selection variable, 1-8 for 8 menu items
 String planetname = String("null");
+RtcDateTime currentTime; //current time variable, used for publishing 
+char planetlist[8][10] = {"sun", "mercury", "venus", "mars", "jupiter", "saturn", "uranus", "neptune"}; //array of planet names
 ///////////////////////////////////////////////////////////
 void drawStar(int cx, int cy, int l1, int l2, int l3) {
   // Длинные лучи
@@ -99,19 +108,28 @@ void initlogooled(){
   oled.home();
   oled.setScale(2);
 }
-void showPlanetInfo(float azimuth, float elevation, const char* planetName) {
+void showPlanetInfo(float altitude, float azimuth, float distance) {
   oled.clear();
   oled.setScale(1);
   oled.setCursor(0,0);
-  oled.printf("Планета: %s\n", planetName);
+  oled.printf("Планета: %s\n", planetlist[selection - 1]);
   oled.printf("Азимут: %.2f\n", azimuth);
-  oled.printf("Высота: %.2f\n", elevation);
+  oled.printf("Высота: %.2f\n", altitude);
+  oled.printf("Расстояние: %.2f\n", distance);
   oled.update();
 }
 void pushtorasp(int selection) {  
   //Publish message
-  msg.data = selection;
-  
+  static char msg_buffer[64];
+  snprintf(msg_buffer, sizeof(msg_buffer), "%d|%04d-%02d-%02d %02d:%02d:%02d",
+           selection,
+           currentTime.Year(), currentTime.Month(), currentTime.Day(),
+           currentTime.Hour(), currentTime.Minute(), currentTime.Second());
+
+  msg.data.data = msg_buffer;
+  msg.data.size = strlen(msg_buffer);
+  msg.data.capacity = sizeof(msg_buffer);
+
   RCSOFTCHECK(rcl_publish(&publisher, &msg, NULL));
   
 }
@@ -212,12 +230,30 @@ void menucheck(char key){
 }
 void error_loop() {
   while(1) {
-    delay(100);
+    oled.clear();
+    oled.setCursor(0,0);
+    oled.printf("not connected\n");
+    Serial.printf("not connected\n");
+    oled.update();
+    delay(1000);
   }
+}
+void subscription_callback(const void * msgin)
+{
+  const geometry_msgs__msg__Vector3 * msg = (const geometry_msgs__msg__Vector3 *)msgin;
+
+  Serial.printf("Received: x=%.2f, y=%.2f, z=%.2f\n", msg->x, msg->y, msg->z);
+  
+  // Process the received message
+  showPlanetInfo(msg->x, msg->y, msg->z);
+  //function for motor rotation todo here
 }
 
 void setup() 
 {
+  //OLED start
+  initlogooled();
+
   Serial.begin(115200);
   set_microros_serial_transports(Serial);
   delay(2000);
@@ -230,18 +266,26 @@ void setup()
   RCCHECK(rclc_publisher_init_default(
     &publisher,
     &node,
-    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Int32),
+    ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, String),
     "planet_info"
   ));
+
+  //Subscriber init
+  RCCHECK(rclc_subscription_init_default(
+    &subscriber,
+    &node,
+    ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Vector3),
+    "/planet_direction"
+  ));
+
+
   
   RCCHECK(rclc_executor_init(&executor, &support.context, 1, &allocator)); //1 second timer
+  RCCHECK(rclc_executor_add_subscription(&executor, &subscriber, &recv_msg, &subscription_callback, ON_NEW_DATA));
 
-  msg.data = 0;
 
 
-  //OLED start
-  initlogooled();
-
+  
 
   //RTC start
   rtc.Begin();
@@ -277,7 +321,7 @@ void loop()
   }
 
   //RTC start
-  RtcDateTime currentTime = rtc.GetDateTime();
+  currentTime = rtc.GetDateTime();
   
   char buf[40];
 
@@ -315,5 +359,5 @@ void loop()
   }
   
   //Keypad end
-
+  rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)); //spin executor to process incoming messages
 }
